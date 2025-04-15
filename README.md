@@ -1,6 +1,10 @@
 
 # IT Sector Financial Dashboard
 
+## DEMO VIDEO
+https://youtu.be/5S_zfJpj6SA
+
+## DEMO IMAGES
 ![Screenshot 2025-04-15 185956](https://github.com/user-attachments/assets/5aa94a7b-c1c8-4da5-b721-5ef4ed5935a4)
 ![Screenshot 2025-04-15 164228](https://github.com/user-attachments/assets/a271d8ec-e8e4-44ba-8beb-5899a7bc9070)
 ![Screenshot 2025-04-15 164311](https://github.com/user-attachments/assets/e7f08539-7188-4272-bc68-11b1f33ffa0a)
