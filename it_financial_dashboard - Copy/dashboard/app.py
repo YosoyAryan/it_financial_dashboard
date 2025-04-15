@@ -5,7 +5,6 @@ import yfinance as yf
 import pandas as pd
 from datetime import datetime, timedelta
 import plotly.graph_objects as go
-import plotly.express as px
 
 # Local imports
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -19,21 +18,57 @@ tab1, tab2, tab3 = st.tabs(["📈 Financial Overview", "💱 Exchange Rates", "�
 
 # --- Static Data ---
 companies = {
+    # Indian IT Companies (INR)
     "TCS": "TCS.NS",
     "Infosys": "INFY.NS",
     "Wipro": "WIPRO.NS",
     "HCL Tech": "HCLTECH.NS",
-    "Tech Mahindra": "TECHM.NS"
+    "Tech Mahindra": "TECHM.NS",
+
+    # U.S. Tech Giants (USD)
+    "Apple": "AAPL",
+    "Microsoft": "MSFT",
+    "Amazon": "AMZN",
+    "Google (Alphabet)": "GOOGL",
+    "Meta (Facebook)": "META",
+    "NVIDIA": "NVDA",
+
+    # Global Tech
+    "SAP (Germany)": "SAP",         # EUR
+    "ASML (Netherlands)": "ASML",   # USD
+    "Samsung (Korea)": "005930.KS", # KRW
+    "Sony (Japan)": "6758.T",       # JPY
+    "Taiwan Semiconductor (TSMC)": "TSM"  # USD
+}
+
+company_currency = {
+    "TCS": "INR", "Infosys": "INR", "Wipro": "INR", "HCL Tech": "INR", "Tech Mahindra": "INR",
+    "Apple": "USD", "Microsoft": "USD", "Amazon": "USD", "Google (Alphabet)": "USD",
+    "Meta (Facebook)": "USD", "NVIDIA": "USD",
+    "SAP (Germany)": "EUR", "ASML (Netherlands)": "USD",
+    "Samsung (Korea)": "KRW", "Sony (Japan)": "JPY",
+    "Taiwan Semiconductor (TSMC)": "USD"
 }
 
 forex_pairs = {
     "USD/INR": ("USD", "INR"),
     "EUR/INR": ("EUR", "INR"),
     "JPY/INR": ("JPY", "INR"),
-    "CHF/INR": ("CHF", "INR")
+    "CHF/INR": ("CHF", "INR"),
+    "KRW/INR": ("KRW", "INR")
 }
 
-# ========== FINANCIAL OVERVIEW TAB (Enhanced with additional graphs and alerts) ==========
+# Pre-fetch conversion rates to INR
+conversion_rates = {}
+for cur in set(company_currency.values()):
+    if cur != "INR":
+        try:
+            rate = get_exchange_rate(cur, "INR")
+            conversion_rates[cur] = rate
+        except:
+            conversion_rates[cur] = None
+
+# ========== FINANCIAL OVERVIEW TAB ==========
 with tab1:
     st.sidebar.header("📁 Financial Filters")
     selected_companies = st.sidebar.multiselect("Select Companies", list(companies.keys()), default=["TCS", "Infosys"])
@@ -41,18 +76,30 @@ with tab1:
     end_date = st.sidebar.date_input("End Date", datetime.today())
 
     combined_data = {}
-    key_stats_rows = []
-
+    key_stats_rows = {}
     price_alerts = {}
 
     for company in selected_companies:
         ticker_symbol = companies[company]
+        currency = company_currency.get(company, "INR")
+        conversion_rate = 1 if currency == "INR" else conversion_rates.get(currency, None)
+
+        if conversion_rate is None:
+            st.warning(f"Skipping {company} — Unable to convert {currency} to INR.")
+            continue
+
         ticker = yf.Ticker(ticker_symbol)
         data = ticker.history(start=start_date, end=end_date)
 
         if data.empty:
             st.warning(f"No data available for {company}")
             continue
+
+        # Convert prices to INR
+        data["Close"] *= conversion_rate
+        data["Open"] *= conversion_rate
+        data["High"] *= conversion_rate
+        data["Low"] *= conversion_rate
 
         data["30MA"] = data["Close"].rolling(window=30).mean()
         data["Daily Return"] = data["Close"].pct_change()
@@ -61,27 +108,26 @@ with tab1:
 
         combined_data[company] = data
 
-        # Collect key stats
         latest = data.iloc[-1]
-        key_stats_rows.append({
+        key_stats_rows[company] = {
             "Company": company,
-            "Latest Price": round(latest["Close"], 2),
+            "Latest Price (INR)": round(latest["Close"], 2),
             "Volume": int(latest["Volume"]),
             "30-Day MA": round(latest["30MA"], 2),
             "Daily Return": round(latest["Daily Return"], 4),
             "30-Day Volatility": round(latest["Volatility"], 4)
-        })
+        }
 
-        # Check if price crosses alert threshold
-        price_alerts[company] = price_alerts.get(company, 0) or st.sidebar.number_input(f"Set alert for {company} (Price)", min_value=0.0)
+        price_alerts[company] = price_alerts.get(company, 0) or st.sidebar.number_input(
+            f"Set alert for {company} (INR)", min_value=0.0
+        )
 
-    # ---- Plotting the charts ----
     if combined_data:
-        st.subheader("📈 Closing Price Comparison")
+        st.subheader("📈 Closing Price Comparison (INR)")
         fig_close = go.Figure()
         for company, data in combined_data.items():
             fig_close.add_trace(go.Scatter(x=data.index, y=data["Close"], mode='lines', name=company))
-        fig_close.update_layout(title="Closing Prices", xaxis_title="Date", yaxis_title="Price")
+        fig_close.update_layout(title="Closing Prices (INR)", xaxis_title="Date", yaxis_title="Price (INR)")
         st.plotly_chart(fig_close, use_container_width=True)
 
         st.subheader("📉 Daily Return Comparison")
@@ -91,19 +137,17 @@ with tab1:
         fig_return.update_layout(title="Daily Returns", xaxis_title="Date", yaxis_title="Return")
         st.plotly_chart(fig_return, use_container_width=True)
 
-        # --- Candlestick Chart ---
         st.subheader("📉 Candlestick Chart (Sample: TCS)")
         tcs_data = combined_data.get('TCS', None)
         if tcs_data is not None:
             fig_candle = go.Figure(data=[go.Candlestick(x=tcs_data.index,
-                                                     open=tcs_data['Open'],
-                                                     high=tcs_data['High'],
-                                                     low=tcs_data['Low'],
-                                                     close=tcs_data['Close'])])
-            fig_candle.update_layout(title="Candlestick Chart for TCS", xaxis_title="Date", yaxis_title="Price")
+                                                        open=tcs_data['Open'],
+                                                        high=tcs_data['High'],
+                                                        low=tcs_data['Low'],
+                                                        close=tcs_data['Close'])])
+            fig_candle.update_layout(title="Candlestick Chart for TCS (INR)", xaxis_title="Date", yaxis_title="Price (INR)")
             st.plotly_chart(fig_candle)
 
-        # --- Volatility Chart ---
         st.subheader("📊 30-Day Rolling Volatility Comparison")
         fig_volatility = go.Figure()
         for company, data in combined_data.items():
@@ -112,7 +156,7 @@ with tab1:
         st.plotly_chart(fig_volatility, use_container_width=True)
 
         st.subheader("📋 Key Stats (Latest)")
-        stats_df = pd.DataFrame(key_stats_rows)
+        stats_df = pd.DataFrame(key_stats_rows.values())
         st.dataframe(stats_df, use_container_width=True)
 
         for company, data in combined_data.items():
@@ -120,52 +164,48 @@ with tab1:
     else:
         st.info("Please select at least one company with available data.")
 
-    # Alert for Price Crossing Threshold
     for company, data in combined_data.items():
         if data['Close'].iloc[-1] > price_alerts.get(company, 0):
-            st.markdown(f"🚨 **Price Alert**: {company} has crossed your set threshold with a price of {data['Close'].iloc[-1]}")
+            st.markdown(f"🚨 **Price Alert**: {company} has crossed your set threshold with a price of {data['Close'].iloc[-1]:.2f} INR")
 
-# ========== EXCHANGE RATES TAB (Real-Time Alerts) ==========
+# ========== EXCHANGE RATES TAB ==========
 with tab2:
     st.sidebar.header("💱 Forex Filters")
     selected_pairs = st.sidebar.multiselect("Select Currency Pairs", list(forex_pairs.keys()), default=["USD/INR", "EUR/INR"])
-    
+
     exchange_alerts = {}
+    exchange_data = []
 
     for pair in selected_pairs:
         base, target = forex_pairs[pair]
-        exchange_alerts[pair] = exchange_alerts.get(pair, 0) or st.sidebar.number_input(f"Set alert for {pair} (Rate)", min_value=0.0)
+        alert_threshold = st.sidebar.number_input(f"Set alert for {pair} (Rate)", min_value=0.0)
+        exchange_alerts[pair] = alert_threshold
 
-    st.subheader("💱 Exchange Rates Overview (Real-time & Last 7 Days)")
-    today = datetime.today()
-    all_data = []
+        try:
+            rate = get_exchange_rate(base, target)
+            if rate:
+                exchange_data.append({
+                    "Currency Pair": pair,
+                    "Rate": round(rate, 4),
+                    "Date": datetime.today().strftime("%Y-%m-%d"),
+                    "Alert Threshold": alert_threshold,
+                    "Alert Triggered": "🚨 Yes" if rate > alert_threshold else "No"
+                })
 
-    for pair in selected_pairs:
-        base, target = forex_pairs[pair]
-        st.markdown(f"### {pair}")
+                if rate > alert_threshold:
+                    st.markdown(f"🚨 **Rate Alert**: {pair} has crossed your set threshold with a rate of {rate}")
 
-        rate_rows = []
-        for i in range(7):
-            date = today - timedelta(days=i)
-            try:
-                # Use current rate for all days (as historical API needs paid tier)
-                rate = get_exchange_rate(base, target)
-                if rate:
-                    rate_rows.append({"Date": date.strftime("%Y-%m-%d"), "Rate": round(rate, 4)})
-                    # Check if rate crosses alert threshold
-                    if rate > exchange_alerts.get(pair, 0):
-                        st.markdown(f"🚨 **Rate Alert**: {pair} has crossed your set threshold with a rate of {rate}")
-            except Exception as e:
-                st.error(f"Error fetching rate for {pair} on {date.strftime('%Y-%m-%d')}: {e}")
+        except Exception as e:
+            st.error(f"Error fetching rate for {pair}: {e}")
 
-        if rate_rows:
-            rate_df = pd.DataFrame(rate_rows).sort_values("Date")
-            st.line_chart(rate_df.set_index("Date"))
-            st.dataframe(rate_df)
+    if exchange_data:
+        df = pd.DataFrame(exchange_data)
+        st.subheader("💱 Real-Time Exchange Rates")
+        st.dataframe(df, use_container_width=True)
+        st.download_button("📥 Download Exchange Rates", df.to_csv(index=False).encode('utf-8'), "exchange_rates.csv", "text/csv")
+    else:
+        st.warning("No data found. Try selecting a different currency pair.")
 
-            st.download_button(f"📥 Download {pair} Rates", rate_df.to_csv(index=False).encode('utf-8'), f"{pair.replace('/', '_')}_rates.csv", "text/csv")
-        else:
-            st.warning(f"No data found for {pair}.")
 # ========== NEWS TAB ==========
 with tab3:
     st.subheader("📰 Latest IT & Tech News")
