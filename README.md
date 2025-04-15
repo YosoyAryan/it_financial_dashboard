@@ -1,7 +1,7 @@
 
 # IT Sector Financial Dashboard
 
-![Screenshot 2025-04-15 164137](https://github.com/user-attachments/assets/74e7ca9e-23c5-4f82-a395-11f3ba93c406)
+![Screenshot 2025-04-15 185956](https://github.com/user-attachments/assets/5aa94a7b-c1c8-4da5-b721-5ef4ed5935a4)
 ![Screenshot 2025-04-15 164228](https://github.com/user-attachments/assets/a271d8ec-e8e4-44ba-8beb-5899a7bc9070)
 ![Screenshot 2025-04-15 164311](https://github.com/user-attachments/assets/e7f08539-7188-4272-bc68-11b1f33ffa0a)
 
